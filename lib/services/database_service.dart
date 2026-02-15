@@ -328,10 +328,14 @@ class DatabaseService {
     // Use direct MySQL for mobile/desktop
     try {
       final res = await _safeQuery(
-          'SELECT 1 FROM users WHERE username = ?', [username]);
-      return res.isNotEmpty;
+          'SELECT COUNT(*) as count FROM users WHERE username = ?', [username]);
+      if (res.isEmpty) return false;
+      final row = res.first;
+      // Handle both numeric index and column name
+      final count = row[0] as int? ?? (row['count'] as int? ?? 0);
+      return count > 0;
     } catch (e) {
-      print('Error checking user: $e');
+      print('[DatabaseService] ⚠ Error checking user: $e');
       return false;
     }
   }
@@ -420,25 +424,40 @@ class DatabaseService {
     // Use direct MySQL for mobile/desktop
     try {
       final res = await _safeQuery(
-        'SELECT user_id, username FROM users WHERE username = ? AND password = ?',
+        'SELECT user_id, username, user_type FROM users WHERE username = ? AND password = ?',
         [username, password],
       );
 
-      if (res.isEmpty) return null;
+      if (res.isEmpty) {
+        print('[DatabaseService] ⚠ User not found or password incorrect');
+        return null;
+      }
 
       final row = res.first;
+      // Handle both numeric index and column name access
+      final userId = (row[0] as int?) ?? (row['user_id'] as int?) ?? 0;
+      final userUsername =
+          (row[1] as String?) ?? (row['username'] as String?) ?? username;
+      final userType =
+          (row[2] as String?) ?? (row['user_type'] as String?) ?? 'user';
+
+      if (userId == 0) {
+        print('[DatabaseService] ⚠ Invalid user_id from query');
+        return null;
+      }
+
       _currentUser = {
-        'user_id': row['user_id'],
-        'username': row['username'],
-        'user_type': 'admin',
+        'user_id': userId,
+        'username': userUsername,
+        'user_type': userType,
       };
 
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('user_id', row['user_id']);
+      await prefs.setInt('user_id', userId);
 
       return _currentUser;
     } catch (e) {
-      print('Error verifying user: $e');
+      print('[DatabaseService] ⚠ Error verifying user: $e');
       return null;
     }
   }
@@ -454,25 +473,29 @@ class DatabaseService {
 
   Future<Map<String, dynamic>> getDeviceStatus(String deviceName) async {
     try {
-      final escapedDevice = deviceName.replaceAll("'", "\\'");
+      // Use parameterized query to prevent SQL injection
       final res = await _safeQuery(
-          "SELECT status, mode FROM devices WHERE device_name = '$escapedDevice' LIMIT 1");
+          'SELECT status, mode FROM devices WHERE device_name = ? LIMIT 1',
+          [deviceName]);
 
       if (res.isEmpty) {
         return {'status': false, 'online': true, 'auto_mode': false};
       }
 
       final row = res.first;
-      final statusStr = row['status'].toString();
-      final modeStr = row['mode'].toString();
+      // Handle both numeric index and column name access
+      final statusStr =
+          (row[0] as String?) ?? (row['status'] as String?) ?? 'OFF';
+      final modeStr =
+          (row[1] as String?) ?? (row['mode'] as String?) ?? 'MANUAL';
 
       return {
-        'status': statusStr == 'ON',
+        'status': statusStr.toUpperCase() == 'ON',
         'online': true,
-        'auto_mode': modeStr == 'AUTO',
+        'auto_mode': modeStr.toUpperCase() == 'AUTO',
       };
     } catch (e) {
-      print('Error getting device status: $e');
+      print('[DatabaseService] ⚠ Error getting device status: $e');
       return {'status': false, 'online': false, 'auto_mode': false};
     }
   }
@@ -580,9 +603,13 @@ class DatabaseService {
           'SELECT $column FROM sensor_logs ORDER BY timestamp DESC LIMIT 1');
 
       if (res.isEmpty) return 0.0;
-      return double.tryParse(res.first[0].toString()) ?? 0.0;
+
+      final row = res.first;
+      // Handle both numeric index and column name access
+      dynamic value = (row[0] ?? row[column]);
+      return double.tryParse(value.toString()) ?? 0.0;
     } catch (e) {
-      print('Error getting sensor value $sensorType: $e');
+      print('[DatabaseService] ⚠ Error getting sensor value $sensorType: $e');
       return 0.0;
     }
   }
@@ -838,54 +865,54 @@ class DatabaseService {
       for (var row in results) {
         try {
           // Convert Row to Map for SensorLog.fromMap
-          // Using safe index access to avoid RangeError
+          // Use column names primarily, with numeric index fallback
           Map<String, dynamic> map = {};
 
-          // Try multiple column name patterns since DB schema might vary
-          try {
-            map = {
-              'log_id': row[0] ?? row['id'] ?? row['log_id'],
-              'plot_id': row[1] ?? row['plot_id'],
-              'air_temp': double.tryParse(
-                      (row[2] ?? row['air_temp'] ?? 0).toString()) ??
-                  0.0,
-              'air_humidity': double.tryParse(
-                      (row[3] ?? row['humidity'] ?? row['air_humidity'] ?? 0)
-                          .toString()) ??
-                  0.0,
-              'leaf_temp': double.tryParse(
-                      (row[4] ?? row['leaf_temp'] ?? 0).toString()) ??
-                  0.0,
-              'light_lux': double.tryParse(
-                      (row[5] ?? row['lux'] ?? row['light_lux'] ?? 0)
-                          .toString()) ??
-                  0.0,
-              'cwsi_index': double.tryParse(
-                      (row[6] ?? row['cwsi'] ?? row['cwsi_index'] ?? 0)
-                          .toString()) ??
-                  0.0,
-              'recorded_at':
-                  (row[7] ?? row['timestamp'] ?? DateTime.now()).toString(),
-            };
-          } catch (e) {
-            print(
-                '[DatabaseService] ⚠ Failed to parse with index access, trying by column name: $e');
-            // Fallback: use row as map directly
-            map = {
-              'log_id': row['id'] ?? row['log_id'],
-              'plot_id': row['plot_id'],
-              'air_temp': row['air_temp'] ?? 0.0,
-              'air_humidity': row['humidity'] ?? row['air_humidity'] ?? 0.0,
-              'leaf_temp': row['leaf_temp'] ?? 0.0,
-              'light_lux': row['lux'] ?? row['light_lux'] ?? 0.0,
-              'cwsi_index': row['cwsi'] ?? row['cwsi_index'] ?? 0.0,
-              'recorded_at': (row['timestamp'] ?? DateTime.now()).toString(),
-            };
+          // Helper function to safely get value from row
+          dynamic _get(dynamic indexOrKey, [dynamic defaultValue]) {
+            try {
+              if (row is Map) {
+                return row[indexOrKey] ?? defaultValue;
+              }
+              // For numeric index, check bounds first
+              if (indexOrKey is int && indexOrKey >= 0) {
+                try {
+                  return row[indexOrKey] ?? defaultValue;
+                } catch (e) {
+                  // Index out of range - return default
+                  return defaultValue;
+                }
+              }
+              return defaultValue;
+            } catch (e) {
+              return defaultValue;
+            }
           }
+
+          map = {
+            'log_id': _get('id', _get('log_id', 0)) as int? ?? 0,
+            'plot_id': _get('plot_id', 0) as int? ?? 0,
+            'air_temp':
+                double.tryParse((_get('air_temp', 0) ?? 0).toString()) ?? 0.0,
+            'air_humidity': double.tryParse(
+                    (_get('humidity', _get('air_humidity', 0)) ?? 0)
+                        .toString()) ??
+                0.0,
+            'leaf_temp':
+                double.tryParse((_get('leaf_temp', 0) ?? 0).toString()) ?? 0.0,
+            'light_lux': double.tryParse(
+                    (_get('lux', _get('light_lux', 0)) ?? 0).toString()) ??
+                0.0,
+            'cwsi_index': double.tryParse(
+                    (_get('cwsi', _get('cwsi_index', 0)) ?? 0).toString()) ??
+                0.0,
+            'recorded_at': (_get('timestamp', DateTime.now()) ?? DateTime.now())
+                .toString(),
+          };
 
           logs.add(SensorLog.fromMap(map));
         } catch (e) {
-          print('[DatabaseService] ⚠ Error parsing row: $e');
+          print('[DatabaseService] ⚠ Error parsing sensor log row: $e');
           // Continue to next row instead of crashing
           continue;
         }
