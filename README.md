@@ -193,7 +193,7 @@ smart-farm-flutter/
 
 ## ผู้พัฒนา
 
-Smart Farm Application - Converted from React Native to Flutter
+Smart Farm Application - Flutter
 
 ## License
 
