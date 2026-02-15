@@ -1,0 +1,61 @@
+name: smart_farm_flutter
+description: Smart Farm application converted from React Native to Flutter
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # UI & Icons
+  cupertino_icons: ^1.0.6
+  flutter_svg: ^2.0.9
+  cached_network_image: ^3.3.0
+
+  # UI Components & Animations
+  fl_chart: ^0.66.0      # กราฟ
+  animations: ^2.0.9
+  flutter_animate: ^4.5.0
+  shimmer: ^3.0.0
+
+  # File Management
+  file_picker: ^8.0.0    # เลือกไฟล์ (ใช้เวอร์ชันใหม่กว่า)
+  excel: ^4.0.6         # อ่าน Excel
+  csv: ^5.0.2
+
+  # Navigation & State
+  go_router: ^13.0.0
+  provider: ^6.1.1
+  path_provider: ^2.1.5
+  share_plus: ^10.0.0
+  intl: ^0.19.0        # สำหรับ DateFormat
+
+  # Networking & API
+  http: ^1.6.0           # API
+  dio: ^5.4.0
+
+  # Database
+  mysql1: ^0.20.0
+  sqflite: ^2.4.2
+  shared_preferences: ^2.2.2
+
+  # Location
+  geolocator: ^11.0.0
+  geocoding: ^3.0.0
+  flutter_map: ^7.0.0
+  latlong2: ^0.9.1
+  connectivity_plus: ^7.0.0
+  jwt_decoder: ^2.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/tree1.png
