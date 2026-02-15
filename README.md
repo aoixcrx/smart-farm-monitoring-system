@@ -1,30 +1,30 @@
 # Smart Farm Flutter Application
 
-แอปพลิเคชัน Smart Farm ที่แปลงจาก React Native เป็น Flutter พร้อมระบบตรวจสอบข้อมูล (Data Validation) และการเชื่อมต่อ MySQL
+แอปพลิเคชัน Smart Farm โดย Flutter
 
 ## คุณสมบัติหลัก
 
 ### 1. ระบบตรวจสอบข้อมูล (Data Validation)
 
 #### หน้าลงทะเบียน (Register Screen)
-- ✅ ตรวจสอบความครบถ้วนของฟอร์ม (Empty State)
-- ✅ ตรวจสอบรหัสผ่านให้ตรงกัน (Password Matching)
-- ✅ แสดงความแข็งแรงของรหัสผ่าน (Password Strength Indicator)
-- ✅ ตรวจสอบความแข็งแรงของรหัสผ่าน (ต้องมีตัวเลขผสมตัวอักษร)
+- ตรวจสอบความครบถ้วนของฟอร์ม (Empty State)
+- ตรวจสอบรหัสผ่านให้ตรงกัน (Password Matching)
+- แสดงความแข็งแรงของรหัสผ่าน (Password Strength Indicator)
+- ตรวจสอบความแข็งแรงของรหัสผ่าน (ต้องมีตัวเลขผสมตัวอักษร)
 
 #### หน้าเข้าสู่ระบบ (Login Screen)
-- ✅ ตรวจสอบรูปแบบอีเมล (Email Format Check)
-- ✅ ตรวจสอบความถูกต้องของบัญชีจากฐานข้อมูล MySQL (Account Verification)
+- ตรวจสอบรูปแบบอีเมล (Email Format Check)
+- ตรวจสอบความถูกต้องของบัญชีจากฐานข้อมูล MySQL (Account Verification)
 
 #### หน้าควบคุมอุปกรณ์ (Control Screen)
-- ✅ ตรวจสอบสถานะการเชื่อมต่อ (Connection Status)
-- ✅ ตรวจสอบโหมดอัตโนมัติ (Auto Mode Conflict Check)
-- ✅ ปิดการใช้งานปุ่มเมื่ออุปกรณ์ออฟไลน์หรืออยู่ในโหมดอัตโนมัติ
+- ตรวจสอบสถานะการเชื่อมต่อ (Connection Status)
+- ตรวจสอบโหมดอัตโนมัติ (Auto Mode Conflict Check)
+- ปิดการใช้งานปุ่มเมื่ออุปกรณ์ออฟไลน์หรืออยู่ในโหมดอัตโนมัติ
 
 #### หน้าข้อมูล CWSI (Data Screen)
-- ✅ ตรวจสอบประเภทไฟล์ (File Extension: .csv, .xlsx เท่านั้น)
-- ✅ ตรวจสอบรูปแบบไฟล์ (File Format Validation)
-- ✅ แสดงข้อความผิดพลาดเมื่อไฟล์ไม่ถูกต้อง
+- ตรวจสอบประเภทไฟล์ (File Extension: .csv, .xlsx เท่านั้น)
+- ตรวจสอบรูปแบบไฟล์ (File Format Validation)
+- แสดงข้อความผิดพลาดเมื่อไฟล์ไม่ถูกต้อง
 
 ### 2. การเชื่อมต่อ MySQL
 
