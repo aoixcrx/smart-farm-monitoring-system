@@ -59,6 +59,41 @@ class _EditPlotScreenState extends State<EditPlotScreen> {
       try {
         print('[EditPlot] Saving plot: ${newPlot.name} (ID: ${newPlot.id})');
 
+        // ✅ CHECK FOR DUPLICATE PLOT NAMES
+        print('[EditPlot] Checking for duplicate plot names...');
+        final allPlots = await HybridDatabaseService().getAllPlots();
+        final duplicatePlot = allPlots.firstWhere(
+          (p) =>
+              p.name.toLowerCase() == newPlot.name.toLowerCase() &&
+              p.id != newPlot.id, // Exclude current plot when editing
+          orElse: () => Plot(
+            name: '',
+            imagePath: '',
+            plantType: '',
+            datePlanted: '',
+          ),
+        );
+
+        if (duplicatePlot.name.isNotEmpty) {
+          // Duplicate found!
+          print(
+              '[EditPlot] ⚠️ Duplicate plot name found: "${duplicatePlot.name}"');
+          if (mounted) {
+            setState(() => _isLoading = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                    'ชื่อแปลง "${newPlot.name}" มีอยู่แล้ว\nกรุณาใช้ชื่อที่ต่างออกไป'),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+          return; // Stop execution
+        }
+
+        print('[EditPlot] Validation passed - no duplicate names found');
+
         if (widget.plot == null) {
           // Create new plot
           print('[EditPlot] Creating new plot...');
