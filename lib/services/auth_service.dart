@@ -145,9 +145,9 @@ class AuthService {
 
       final data = jsonDecode(response.body);
 
-      if (response.statusCode == 200 && data['status'] == 'success') {
-        // Extract data from nested response
-        final responseData = data['data'] ?? {};
+      if (response.statusCode == 200 && data['success'] == true) {
+        // Extract data from response
+        final responseData = data;
 
         // Save tokens
         final accessToken = responseData['access_token'] ?? '';
@@ -155,10 +155,11 @@ class AuthService {
         await saveTokens(accessToken, refreshToken);
 
         // Create user object from response data
+        final userObj = responseData['user'] ?? {};
         final user = {
-          'user_id': responseData['user_id'],
-          'username': responseData['username'],
-          'email': responseData['email'],
+          'user_id': userObj['user_id'] ?? '',
+          'username': userObj['username'] ?? '',
+          'email': userObj.containsKey('email') ? userObj['email'] ?? '' : '',
         };
         await saveUser(user);
 
@@ -206,9 +207,9 @@ class AuthService {
 
       final data = jsonDecode(response.body);
 
-      if (response.statusCode == 201 && data['status'] == 'success') {
-        // Extract data from nested response
-        final responseData = data['data'] ?? {};
+      if (response.statusCode == 201 && data['success'] == true) {
+        // Extract data from response
+        final responseData = data;
 
         // Save tokens
         final accessToken = responseData['access_token'] ?? '';
@@ -216,10 +217,11 @@ class AuthService {
         await saveTokens(accessToken, refreshToken);
 
         // Create user object
+        final userObj = responseData['user'] ?? {};
         final user = {
-          'user_id': responseData['user_id'],
-          'username': responseData['username'],
-          'email': responseData['email'] ?? '',
+          'user_id': userObj['user_id'] ?? '',
+          'username': userObj['username'] ?? '',
+          'email': userObj.containsKey('email') ? userObj['email'] ?? '' : '',
         };
         await saveUser(user);
 

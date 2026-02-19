@@ -3,14 +3,14 @@ import mysql.connector
 import math
 from datetime import datetime
 
-# ===== ThingSpeak =====
+#ThingSpeak
 CHANNEL_ID = "3211612"        # Channel ID
 READ_API_KEY = "DUJ1X4OCWFMWH1U0"   # Read API Key
 RESULTS_COUNT = 1000
 
 url = f"https://api.thingspeak.com/channels/{CHANNEL_ID}/feeds.json?api_key={READ_API_KEY}&results={RESULTS_COUNT}"
 
-# ===== MySQL Connection =====
+#MySQL Connection
 try:
     db = mysql.connector.connect(
         host="localhost",
@@ -24,7 +24,7 @@ except mysql.connector.Error as err:
     print(f"Error connecting to MySQL: {err}")
     exit(1)
 
-# ===== 1. Setup Database Schema =====
+# 1. Setup Database Schema
 def create_tables():
     # DROP TABLES in reverse dependency order
     cursor.execute("DROP TABLE IF EXISTS device_logs")
@@ -124,7 +124,7 @@ def create_tables():
 
     print("Database schema ensured.")
 
-# ===== 2. Seed Default Data (Required for Foreign Keys) =====
+# 2. Seed Default Data (Required for Foreign Keys)
 def seed_initial_data():
     # Ensure at least one user exists
     cursor.execute("SELECT user_id FROM users LIMIT 1")
@@ -182,7 +182,7 @@ def seed_initial_data():
         
     return plot_id
 
-# ===== 3. Import Data =====
+# 3. Import Data
 def import_thingspeak_data(target_plot_id):
     print("Fetching data from ThingSpeak...")
     try:
@@ -258,7 +258,7 @@ def import_thingspeak_data(target_plot_id):
     db.commit()
     print(f"Data imported successfully. New records: {imported_count}")
 
-# ===== Execution Flow =====
+# Execution Flow
 create_tables()
 default_plot_id = seed_initial_data()
 import_thingspeak_data(default_plot_id)

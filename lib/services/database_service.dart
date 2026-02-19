@@ -4,8 +4,25 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:io';
 import '../models/plot.dart';
 import '../models/sensor_log.dart';
+
+/// Helper function to get correct API base URL based on platform
+String getApiBaseUrl() {
+  if (kIsWeb) {
+    // Web runs on same origin
+    return 'http://localhost:5000/api';
+  } else if (Platform.isAndroid) {
+    // Android Emulator uses 10.0.2.2 to access host machine
+    return 'http://10.0.2.2:5000/api';
+  } else if (Platform.isIOS) {
+    // iOS Simulator can use localhost
+    return 'http://localhost:5000/api';
+  }
+  // Default fallback
+  return 'http://localhost:5000/api';
+}
 
 /// Mutex (Mutual Exclusion) Lock to prevent concurrent database queries
 /// This prevents RangeError from concurrent access to the mysql1 connection
@@ -47,9 +64,8 @@ class DatabaseService {
   static const String _username = 'root';
   static const String _password = '200413';
 
-  // For Flutter Web - REST API endpoint
-  static const String _apiBaseUrl =
-      'http://localhost:5000/api'; // Change to your API server URL
+  // For Flutter Web - REST API endpoint (auto-detects platform)
+  late final String _apiBaseUrl = getApiBaseUrl();
 
   MySqlConnection? _connection;
   Completer<MySqlConnection>? _connectionCompleter;

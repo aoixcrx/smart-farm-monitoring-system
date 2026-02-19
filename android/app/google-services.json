@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "420411110177",
+    "project_id": "smart-farm-flutter",
+    "storage_bucket": "smart-farm-flutter.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:420411110177:android:5983492d048603b8e20460",
+        "android_client_info": {
+          "package_name": "com.example.smart_farm_flutter"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCbxVW1NZ97sFjYqH_LY_yeatIynBt2mIY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

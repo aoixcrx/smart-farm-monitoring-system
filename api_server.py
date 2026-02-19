@@ -5,23 +5,40 @@ from datetime import datetime, timedelta
 import jwt
 import bcrypt
 from functools import wraps
+import os
+import logging
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for Flutter Web
 
-# JWT Configuration
-SECRET_KEY = 'smart_farm_secret_key_2026'  # In production, use environment variable
+# ==================== PRODUCTION CONFIG ====================
+# Load from environment variables (with defaults for development)
+SECRET_KEY = os.getenv("SECRET_KEY", "smart_farm_secret_key_2026")
+DEBUG_MODE = os.getenv("FLASK_DEBUG", "False").lower() == "true"
+
 JWT_ACCESS_EXPIRES = timedelta(minutes=30)
 JWT_REFRESH_EXPIRES = timedelta(days=7)
 
-# MySQL Configuration
+# MySQL Configuration - Load from .env or use defaults
 DB_CONFIG = {
-    'host': 'localhost',
-    'port': 3306,
-    'user': 'root',
-    'password': '200413',
-    'database': 'smart_farm_db'
+    'host': os.getenv("DB_HOST", "localhost"),
+    'port': int(os.getenv("DB_PORT", 3306)),
+    'user': os.getenv("DB_USER", "root"),
+    'password': os.getenv("DB_PASSWORD", "200413"),
+    'database': os.getenv("DB_NAME", "smart_farm_db")
 }
+
+# ==================== LOGGING SETUP ====================
+os.makedirs("logs", exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("logs/app.log"),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 def get_db_connection():
     """Create and return a MySQL connection"""
@@ -32,7 +49,7 @@ def get_db_connection():
         print(f"Error connecting to MySQL: {e}")
         return None
 
-# ==================== JWT HELPERS ====================
+# JWT HELPERS
 
 def hash_password(password):
     """Hash password using bcrypt"""
@@ -99,8 +116,7 @@ def token_required(f):
     return decorated
 
 
-# ==================== ENVIRONMENT DATA ====================
-
+# ENVIRONMENT DATA
 @app.route('/api/environment', methods=['GET'])
 def get_environment():
     """Get latest environment data (air temp, humidity, lux, leaf temp)"""
@@ -127,7 +143,7 @@ def get_environment():
         print(f"Error: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ==================== PLOTS ====================
+# PLOTS 
 
 @app.route('/api/plots', methods=['GET'])
 def get_plots():
@@ -235,7 +251,7 @@ def delete_plot(plot_id):
         print(f"Error: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ==================== DEVICES ====================
+# DEVICES
 
 @app.route('/api/devices/<device_name>', methods=['GET'])
 def get_device_status(device_name):
@@ -300,7 +316,7 @@ def update_device_status(device_name):
         print(f"Error: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ==================== SENSOR DATA ====================
+# SENSOR DATA
 
 @app.route('/api/sensor/latest', methods=['GET'])
 def get_latest_sensor():
@@ -340,7 +356,7 @@ def get_latest_sensor():
         print(f"Error: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ==================== SENSOR DATA CRUD ====================
+# SENSOR DATA CRUD 
 
 @app.route('/api/sensor/init', methods=['POST'])
 def init_sensor_table():
@@ -547,7 +563,7 @@ def delete_old_sensor_data():
         return jsonify({'error': str(e)}), 500
 
 
-# ==================== DEVICE CONTROL API ====================
+# DEVICE CONTROL API
 
 @app.route('/api/device/<device_name>', methods=['GET'])
 def api_get_device_status(device_name):
@@ -613,7 +629,7 @@ def api_update_device_status(device_name):
         return jsonify({'error': str(e)}), 500
 
 
-# ==================== ENVIRONMENT API ====================
+# ENVIRONMENT API 
 
 @app.route('/api/environment', methods=['GET'])
 def get_environment_data():
@@ -652,7 +668,7 @@ def get_environment_data():
         print(f"Environment API Error: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ==================== AUTH ====================
+# AUTH
 
 @app.route('/api/sensor-logs', methods=['GET'])
 def get_sensor_logs():
@@ -697,7 +713,1071 @@ def get_sensor_logs():
         return jsonify({'error': str(e)}), 500
 
 
-# ==================== AUTH ====================
+# TRASH BIN DATA
+
+@app.route('/api/bin-data/init', methods=['POST'])
+def init_bin_table():
+    """Create trash_bin_logs table if not exists"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS trash_bin_logs (
+                log_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                bin_id VARCHAR(50) NOT NULL,
+                distance_cm DECIMAL(6,2) NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_bin_created (bin_id, created_at)
+            )
+        ''')
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({'message': 'trash_bin_logs table created successfully'})
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/bin-data', methods=['POST'])
+def record_bin_data():
+    """Record trash bin distance data from ESP32 sensor
+    
+    Request JSON:
+    {
+        "bin_id": "BIN001",
+        "distance_cm": 4.5,
+        "timestamp": "2026-02-15T17:00:00"
+    }
+    
+    Response:
+    {
+        "status": "success",
+        "message": "Data recorded",
+        "log_id": 123
+    }
+    """
+    data = request.json
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    bin_id = data.get('bin_id')
+    distance_cm = data.get('distance_cm')
+    timestamp = data.get('timestamp')
+    
+    # Validate required fields
+    if not bin_id or distance_cm is None:
+        return jsonify({'error': 'Missing required fields: bin_id, distance_cm'}), 400
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        # Ensure table exists
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS trash_bin_logs (
+                log_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                bin_id VARCHAR(50) NOT NULL,
+                distance_cm DECIMAL(6,2) NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_bin_created (bin_id, created_at)
+            )
+        ''')
+        
+        # Insert data
+        if timestamp:
+            cursor.execute('''
+                INSERT INTO trash_bin_logs (bin_id, distance_cm, created_at)
+                VALUES (%s, %s, %s)
+            ''', (bin_id, distance_cm, timestamp))
+        else:
+            cursor.execute('''
+                INSERT INTO trash_bin_logs (bin_id, distance_cm)
+                VALUES (%s, %s)
+            ''', (bin_id, distance_cm))
+        
+        conn.commit()
+        log_id = cursor.lastrowid
+        cursor.close()
+        conn.close()
+        
+        print(f"✅ Bin data recorded: {bin_id} - {distance_cm}cm")
+        return jsonify({
+            'status': 'success',
+            'message': 'Data recorded',
+            'log_id': log_id
+        }), 201
+    except Exception as e:
+        print(f"Error recording bin data: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/bin-data', methods=['GET'])
+def get_bin_data():
+    """Get trash bin data history"""
+    bin_id = request.args.get('bin_id')
+    limit = request.args.get('limit', 100, type=int)
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor(dictionary=True)
+        if bin_id:
+            cursor.execute('''
+                SELECT log_id, bin_id, distance_cm, created_at
+                FROM trash_bin_logs
+                WHERE bin_id = %s
+                ORDER BY created_at DESC
+                LIMIT %s
+            ''', (bin_id, limit))
+        else:
+            cursor.execute('''
+                SELECT log_id, bin_id, distance_cm, created_at
+                FROM trash_bin_logs
+                ORDER BY created_at DESC
+                LIMIT %s
+            ''', (limit,))
+        
+        results = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        logs = []
+        for row in results:
+            logs.append({
+                'log_id': row['log_id'],
+                'bin_id': row['bin_id'],
+                'distance_cm': float(row['distance_cm']),
+                'created_at': str(row['created_at']) if row['created_at'] else ''
+            })
+        
+        return jsonify({'logs': logs, 'count': len(logs)})
+    except Exception as e:
+        print(f"Bin Data Retrieval Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== DEVICE LOGS API ====================
+
+@app.route('/api/device-logs/init', methods=['POST'])
+def init_device_logs_table():
+    """Initialize device_logs table"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS device_logs (
+                log_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                device_id INT NOT NULL,
+                device_name VARCHAR(100),
+                action VARCHAR(50),
+                source VARCHAR(20),
+                old_value VARCHAR(255),
+                new_value VARCHAR(255),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_device_created (device_id, created_at)
+            )
+        ''')
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({'message': 'device_logs table created successfully'})
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/device-logs', methods=['POST'])
+def record_device_log():
+    """Record device action/state change
+    
+    Request: {
+        "device_id": 1,
+        "device_name": "Pump001",
+        "action": "ON/OFF/MODE_CHANGE",
+        "source": "APP/AUTO/MANUAL",
+        "old_value": "OFF",
+        "new_value": "ON"
+    }
+    """
+    data = request.json
+    if not data or 'device_id' not in data or 'action' not in data:
+        return jsonify({'error': 'Missing required fields'}), 400
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS device_logs (
+                log_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                device_id INT NOT NULL,
+                device_name VARCHAR(100),
+                action VARCHAR(50),
+                source VARCHAR(20),
+                old_value VARCHAR(255),
+                new_value VARCHAR(255),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_device_created (device_id, created_at)
+            )
+        ''')
+        
+        cursor.execute('''
+            INSERT INTO device_logs (device_id, device_name, action, source, old_value, new_value)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        ''', (
+            data.get('device_id'),
+            data.get('device_name', ''),
+            data.get('action'),
+            data.get('source', 'MANUAL'),
+            data.get('old_value', ''),
+            data.get('new_value', '')
+        ))
+        
+        conn.commit()
+        log_id = cursor.lastrowid
+        cursor.close()
+        conn.close()
+        
+        return jsonify({'success': True, 'log_id': log_id, 'message': 'Device log recorded'}), 201
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/device-logs', methods=['GET'])
+def get_device_logs():
+    """Get device logs filtered by device_id"""
+    device_id = request.args.get('device_id', type=int)
+    limit = request.args.get('limit', 100, type=int)
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor(dictionary=True)
+        if device_id:
+            cursor.execute('''
+                SELECT * FROM device_logs
+                WHERE device_id = %s
+                ORDER BY created_at DESC
+                LIMIT %s
+            ''', (device_id, limit))
+        else:
+            cursor.execute('''
+                SELECT * FROM device_logs
+                ORDER BY created_at DESC
+                LIMIT %s
+            ''', (limit,))
+        
+        results = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        logs = [dict(row) for row in results]
+        for log in logs:
+            if 'created_at' in log:
+                log['created_at'] = str(log['created_at'])
+        
+        return jsonify({'logs': logs, 'count': len(logs)})
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== WEATHER API ====================
+
+@app.route('/api/weather/init', methods=['POST'])
+def init_weather_table():
+    """Initialize weather_logs table"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS weather_logs (
+                weather_id INT AUTO_INCREMENT PRIMARY KEY,
+                location VARCHAR(100),
+                latitude DECIMAL(10,8),
+                longitude DECIMAL(11,8),
+                temperature DECIMAL(5,2),
+                humidity DECIMAL(5,2),
+                wind_speed DECIMAL(6,2),
+                rainfall DECIMAL(6,2),
+                weather_condition VARCHAR(100),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_location_created (location, created_at)
+            )
+        ''')
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({'message': 'weather_logs table created successfully'})
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/weather', methods=['POST'])
+def record_weather():
+    """Record weather data
+    
+    Request: {
+        "location": "Farm A",
+        "latitude": 13.7563,
+        "longitude": 100.5018,
+        "temperature": 28.5,
+        "humidity": 75.0,
+        "wind_speed": 5.2,
+        "rainfall": 0.0,
+        "weather_condition": "Partly Cloudy"
+    }
+    """
+    data = request.json
+    if not data or 'location' not in data:
+        return jsonify({'error': 'Location required'}), 400
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS weather_logs (
+                weather_id INT AUTO_INCREMENT PRIMARY KEY,
+                location VARCHAR(100),
+                latitude DECIMAL(10,8),
+                longitude DECIMAL(11,8),
+                temperature DECIMAL(5,2),
+                humidity DECIMAL(5,2),
+                wind_speed DECIMAL(6,2),
+                rainfall DECIMAL(6,2),
+                weather_condition VARCHAR(100),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_location_created (location, created_at)
+            )
+        ''')
+        
+        cursor.execute('''
+            INSERT INTO weather_logs 
+            (location, latitude, longitude, temperature, humidity, wind_speed, rainfall, weather_condition)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        ''', (
+            data.get('location'),
+            data.get('latitude', 0),
+            data.get('longitude', 0),
+            data.get('temperature', 0),
+            data.get('humidity', 0),
+            data.get('wind_speed', 0),
+            data.get('rainfall', 0),
+            data.get('weather_condition', '')
+        ))
+        
+        conn.commit()
+        weather_id = cursor.lastrowid
+        cursor.close()
+        conn.close()
+        
+        return jsonify({'success': True, 'weather_id': weather_id}), 201
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/weather', methods=['GET'])
+def get_weather():
+    """Get latest weather data by location"""
+    location = request.args.get('location')
+    limit = request.args.get('limit', 1, type=int)
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor(dictionary=True)
+        if location:
+            cursor.execute('''
+                SELECT * FROM weather_logs
+                WHERE location = %s
+                ORDER BY created_at DESC
+                LIMIT %s
+            ''', (location, limit))
+        else:
+            cursor.execute('''
+                SELECT * FROM weather_logs
+                ORDER BY created_at DESC
+                LIMIT %s
+            ''', (limit,))
+        
+        results = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        logs = [dict(row) for row in results]
+        return jsonify({'weather': logs, 'count': len(logs)})
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== ALERTS API ====================
+
+@app.route('/api/alerts/init', methods=['POST'])
+def init_alerts_table():
+    """Initialize alerts table"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS alerts (
+                alert_id INT AUTO_INCREMENT PRIMARY KEY,
+                plot_id INT,
+                alert_type VARCHAR(50),
+                severity VARCHAR(20),
+                message TEXT,
+                is_resolved BOOLEAN DEFAULT FALSE,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                resolved_at DATETIME,
+                INDEX idx_plot_created (plot_id, created_at)
+            )
+        ''')
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({'message': 'alerts table created successfully'})
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/alerts', methods=['POST'])
+def create_alert():
+    """Create farm alert
+    
+    Request: {
+        "plot_id": 1,
+        "alert_type": "HIGH_TEMP/LOW_MOISTURE/DEVICE_FAILURE",
+        "severity": "LOW/MEDIUM/HIGH",
+        "message": "Temperature exceeded threshold"
+    }
+    """
+    data = request.json
+    if not data or 'alert_type' not in data or 'severity' not in data:
+        return jsonify({'error': 'Missing required fields'}), 400
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS alerts (
+                alert_id INT AUTO_INCREMENT PRIMARY KEY,
+                plot_id INT,
+                alert_type VARCHAR(50),
+                severity VARCHAR(20),
+                message TEXT,
+                is_resolved BOOLEAN DEFAULT FALSE,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                resolved_at DATETIME,
+                INDEX idx_plot_created (plot_id, created_at)
+            )
+        ''')
+        
+        cursor.execute('''
+            INSERT INTO alerts (plot_id, alert_type, severity, message)
+            VALUES (%s, %s, %s, %s)
+        ''', (
+            data.get('plot_id', 1),
+            data.get('alert_type'),
+            data.get('severity'),
+            data.get('message', '')
+        ))
+        
+        conn.commit()
+        alert_id = cursor.lastrowid
+        cursor.close()
+        conn.close()
+        
+        return jsonify({'success': True, 'alert_id': alert_id}), 201
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/alerts', methods=['GET'])
+def get_alerts():
+    """Get alerts, optionally filtered by plot_id and resolution status"""
+    plot_id = request.args.get('plot_id', type=int)
+    is_resolved = request.args.get('is_resolved', 'false').lower() == 'true'
+    limit = request.args.get('limit', 50, type=int)
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor(dictionary=True)
+        if plot_id:
+            cursor.execute('''
+                SELECT * FROM alerts
+                WHERE plot_id = %s AND is_resolved = %s
+                ORDER BY created_at DESC
+                LIMIT %s
+            ''', (plot_id, is_resolved, limit))
+        else:
+            cursor.execute('''
+                SELECT * FROM alerts
+                WHERE is_resolved = %s
+                ORDER BY created_at DESC
+                LIMIT %s
+            ''', (is_resolved, limit))
+        
+        results = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        alerts = [dict(row) for row in results]
+        return jsonify({'alerts': alerts, 'count': len(alerts)})
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/alerts/<int:alert_id>/resolve', methods=['PUT'])
+def resolve_alert(alert_id):
+    """Mark alert as resolved"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE alerts
+            SET is_resolved = TRUE, resolved_at = NOW()
+            WHERE alert_id = %s
+        ''', (alert_id,))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        return jsonify({'success': True, 'message': 'Alert resolved'})
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== MAINTENANCE SCHEDULE API ====================
+
+@app.route('/api/maintenance/init', methods=['POST'])
+def init_maintenance_table():
+    """Initialize maintenance table"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS maintenance_schedules (
+                maintenance_id INT AUTO_INCREMENT PRIMARY KEY,
+                device_id INT NOT NULL,
+                device_name VARCHAR(100),
+                maintenance_type VARCHAR(100),
+                scheduled_date DATE,
+                last_maintenance_date DATE,
+                status VARCHAR(50),
+                notes TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_device_date (device_id, scheduled_date)
+            )
+        ''')
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({'message': 'maintenance_schedules table created successfully'})
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/maintenance', methods=['POST'])
+def schedule_maintenance():
+    """Schedule device maintenance
+    
+    Request: {
+        "device_id": 1,
+        "device_name": "Pump001",
+        "maintenance_type": "Oil Change/Filter Replacement",
+        "scheduled_date": "2026-03-15",
+        "notes": "Routine maintenance"
+    }
+    """
+    data = request.json
+    if not data or 'device_id' not in data or 'scheduled_date' not in data:
+        return jsonify({'error': 'Missing required fields'}), 400
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS maintenance_schedules (
+                maintenance_id INT AUTO_INCREMENT PRIMARY KEY,
+                device_id INT NOT NULL,
+                device_name VARCHAR(100),
+                maintenance_type VARCHAR(100),
+                scheduled_date DATE,
+                last_maintenance_date DATE,
+                status VARCHAR(50),
+                notes TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_device_date (device_id, scheduled_date)
+            )
+        ''')
+        
+        cursor.execute('''
+            INSERT INTO maintenance_schedules 
+            (device_id, device_name, maintenance_type, scheduled_date, status, notes)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        ''', (
+            data.get('device_id'),
+            data.get('device_name', ''),
+            data.get('maintenance_type', ''),
+            data.get('scheduled_date'),
+            data.get('status', 'PENDING'),
+            data.get('notes', '')
+        ))
+        
+        conn.commit()
+        maintenance_id = cursor.lastrowid
+        cursor.close()
+        conn.close()
+        
+        return jsonify({'success': True, 'maintenance_id': maintenance_id}), 201
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/maintenance', methods=['GET'])
+def get_maintenance():
+    """Get maintenance schedules"""
+    device_id = request.args.get('device_id', type=int)
+    status = request.args.get('status', 'PENDING')
+    limit = request.args.get('limit', 50, type=int)
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor(dictionary=True)
+        if device_id:
+            cursor.execute('''
+                SELECT * FROM maintenance_schedules
+                WHERE device_id = %s AND status = %s
+                ORDER BY scheduled_date ASC
+                LIMIT %s
+            ''', (device_id, status, limit))
+        else:
+            cursor.execute('''
+                SELECT * FROM maintenance_schedules
+                WHERE status = %s
+                ORDER BY scheduled_date ASC
+                LIMIT %s
+            ''', (status, limit))
+        
+        results = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        schedules = [dict(row) for row in results]
+        return jsonify({'schedules': schedules, 'count': len(schedules)})
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== CROP HEALTH METRICS API ====================
+
+@app.route('/api/crop-health/init', methods=['POST'])
+def init_crop_health_table():
+    """Initialize crop health table"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS crop_health_metrics (
+                metric_id INT AUTO_INCREMENT PRIMARY KEY,
+                plot_id INT NOT NULL,
+                cwsi_value DECIMAL(5,2),
+                leaf_temperature DECIMAL(5,2),
+                air_temperature DECIMAL(5,2),
+                soil_moisture DECIMAL(5,2),
+                soil_ec DECIMAL(6,3),
+                health_status VARCHAR(50),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_plot_created (plot_id, created_at)
+            )
+        ''')
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({'message': 'crop_health_metrics table created successfully'})
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/crop-health', methods=['POST'])
+def record_crop_health():
+    """Record crop health metrics
+    
+    Request: {
+        "plot_id": 1,
+        "cwsi_value": 0.45,
+        "leaf_temperature": 28.5,
+        "air_temperature": 29.0,
+        "soil_moisture": 65.0,
+        "soil_ec": 2.5
+    }
+    """
+    data = request.json
+    if not data or 'plot_id' not in data:
+        return jsonify({'error': 'plot_id required'}), 400
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS crop_health_metrics (
+                metric_id INT AUTO_INCREMENT PRIMARY KEY,
+                plot_id INT NOT NULL,
+                cwsi_value DECIMAL(5,2),
+                leaf_temperature DECIMAL(5,2),
+                air_temperature DECIMAL(5,2),
+                soil_moisture DECIMAL(5,2),
+                soil_ec DECIMAL(6,3),
+                health_status VARCHAR(50),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_plot_created (plot_id, created_at)
+            )
+        ''')
+        
+        cwsi = data.get('cwsi_value', 0)
+        health_status = 'Healthy' if cwsi < 0.5 else ('Stressed' if cwsi < 0.8 else 'Critical')
+        
+        cursor.execute('''
+            INSERT INTO crop_health_metrics 
+            (plot_id, cwsi_value, leaf_temperature, air_temperature, soil_moisture, soil_ec, health_status)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        ''', (
+            data.get('plot_id'),
+            cwsi,
+            data.get('leaf_temperature', 0),
+            data.get('air_temperature', 0),
+            data.get('soil_moisture', 0),
+            data.get('soil_ec', 0),
+            health_status
+        ))
+        
+        conn.commit()
+        metric_id = cursor.lastrowid
+        cursor.close()
+        conn.close()
+        
+        return jsonify({'success': True, 'metric_id': metric_id, 'health_status': health_status}), 201
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/crop-health', methods=['GET'])
+def get_crop_health():
+    """Get crop health metrics for a plot"""
+    plot_id = request.args.get('plot_id', type=int)
+    limit = request.args.get('limit', 100, type=int)
+    
+    if not plot_id:
+        return jsonify({'error': 'plot_id required'}), 400
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute('''
+            SELECT * FROM crop_health_metrics
+            WHERE plot_id = %s
+            ORDER BY created_at DESC
+            LIMIT %s
+        ''', (plot_id, limit))
+        
+        results = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        metrics = [dict(row) for row in results]
+        return jsonify({'metrics': metrics, 'count': len(metrics)})
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== FARM STATISTICS API ====================
+
+@app.route('/api/statistics/overview', methods=['GET'])
+def get_farm_statistics():
+    """Get farm overview statistics"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor(dictionary=True)
+        
+        stats = {}
+        
+        # Total plots
+        cursor.execute('SELECT COUNT(*) as count FROM plots')
+        stats['total_plots'] = cursor.fetchone()['count'] or 0
+        
+        # Active devices
+        cursor.execute("SELECT COUNT(*) as count FROM devices WHERE status = 'ON'")
+        stats['active_devices'] = cursor.fetchone()['count'] or 0
+        
+        # Total sensors
+        cursor.execute('SELECT COUNT(*) as count FROM sensor_logs')
+        stats['total_sensor_readings'] = cursor.fetchone()['count'] or 0
+        
+        # Latest sensor data
+        cursor.execute('''
+            SELECT AVG(CAST(air_temp AS DECIMAL)) as avg_temp,
+                   AVG(CAST(humidity AS DECIMAL)) as avg_humidity
+            FROM sensor_logs WHERE timestamp > DATE_SUB(NOW(), INTERVAL 1 DAY)
+        ''')
+        latest = cursor.fetchone()
+        stats['avg_temperature'] = float(latest['avg_temp']) if latest['avg_temp'] else 0
+        stats['avg_humidity'] = float(latest['avg_humidity']) if latest['avg_humidity'] else 0
+        
+        # Unresolved alerts
+        cursor.execute("SELECT COUNT(*) as count FROM alerts WHERE is_resolved = FALSE")
+        stats['pending_alerts'] = cursor.fetchone()['count'] or 0
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify(stats)
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/statistics/plot/<int:plot_id>', methods=['GET'])
+def get_plot_statistics(plot_id):
+    """Get statistics for a specific plot"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor(dictionary=True)
+        
+        stats = {'plot_id': plot_id}
+        
+        # Get plot info
+        cursor.execute('SELECT * FROM plots WHERE plot_id = %s', (plot_id,))
+        plot = cursor.fetchone()
+        
+        if not plot:
+            return jsonify({'error': 'Plot not found'}), 404
+        
+        stats['plot_name'] = plot.get('plot_name', '')
+        stats['plant_type'] = plot.get('plant_type', '')
+        
+        # Latest crop health
+        cursor.execute('''
+            SELECT * FROM crop_health_metrics
+            WHERE plot_id = %s
+            ORDER BY created_at DESC
+            LIMIT 1
+        ''', (plot_id,))
+        health = cursor.fetchone()
+        
+        if health:
+            stats['latest_health'] = dict(health)
+            stats['latest_health']['created_at'] = str(health['created_at'])
+        
+        # 7-day average
+        cursor.execute('''
+            SELECT AVG(CAST(cwsi_value AS DECIMAL)) as avg_cwsi,
+                   AVG(CAST(soil_moisture AS DECIMAL)) as avg_moisture
+            FROM crop_health_metrics
+            WHERE plot_id = %s AND created_at > DATE_SUB(NOW(), INTERVAL 7 DAY)
+        ''', (plot_id,))
+        avg = cursor.fetchone()
+        stats['week_avg_cwsi'] = float(avg['avg_cwsi']) if avg['avg_cwsi'] else 0
+        stats['week_avg_moisture'] = float(avg['avg_moisture']) if avg['avg_moisture'] else 0
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify(stats)
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== DEVICE STATUS HISTORY API ====================
+
+@app.route('/api/device-history/init', methods=['POST'])
+def init_device_history_table():
+    """Initialize device status history table"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS device_status_history (
+                history_id INT AUTO_INCREMENT PRIMARY KEY,
+                device_id INT NOT NULL,
+                device_name VARCHAR(100),
+                status VARCHAR(20),
+                mode VARCHAR(20),
+                uptime_seconds INT,
+                error_count INT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_device_created (device_id, created_at)
+            )
+        ''')
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({'message': 'device_status_history table created successfully'})
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/device-history', methods=['POST'])
+def record_device_history():
+    """Record device status history
+    
+    Request: {
+        "device_id": 1,
+        "device_name": "Pump001",
+        "status": "ON/OFF",
+        "mode": "AUTO/MANUAL",
+        "uptime_seconds": 3600,
+        "error_count": 0
+    }
+    """
+    data = request.json
+    if not data or 'device_id' not in data:
+        return jsonify({'error': 'device_id required'}), 400
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS device_status_history (
+                history_id INT AUTO_INCREMENT PRIMARY KEY,
+                device_id INT NOT NULL,
+                device_name VARCHAR(100),
+                status VARCHAR(20),
+                mode VARCHAR(20),
+                uptime_seconds INT,
+                error_count INT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_device_created (device_id, created_at)
+            )
+        ''')
+        
+        cursor.execute('''
+            INSERT INTO device_status_history 
+            (device_id, device_name, status, mode, uptime_seconds, error_count)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        ''', (
+            data.get('device_id'),
+            data.get('device_name', ''),
+            data.get('status', 'OFF'),
+            data.get('mode', 'MANUAL'),
+            data.get('uptime_seconds', 0),
+            data.get('error_count', 0)
+        ))
+        
+        conn.commit()
+        history_id = cursor.lastrowid
+        cursor.close()
+        conn.close()
+        
+        return jsonify({'success': True, 'history_id': history_id}), 201
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/device-history', methods=['GET'])
+def get_device_history():
+    """Get device status history"""
+    device_id = request.args.get('device_id', type=int)
+    limit = request.args.get('limit', 100, type=int)
+    
+    if not device_id:
+        return jsonify({'error': 'device_id required'}), 400
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute('''
+            SELECT * FROM device_status_history
+            WHERE device_id = %s
+            ORDER BY created_at DESC
+            LIMIT %s
+        ''', (device_id, limit))
+        
+        results = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        history = [dict(row) for row in results]
+        for h in history:
+            if 'created_at' in h:
+                h['created_at'] = str(h['created_at'])
+        
+        return jsonify({'history': history, 'count': len(history)})
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# AUTH 
 
 @app.route('/api/auth/check', methods=['POST'])
 def check_user():
@@ -790,7 +1870,7 @@ def init_all_tables():
     try:
         cursor = conn.cursor()
         
-        # ==================== USERS TABLE ====================
+        # USERS TABLE
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 user_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -812,7 +1892,7 @@ def init_all_tables():
             except:
                 pass
         
-        # ==================== PLOTS TABLE ====================
+        #  PLOTS TABLE 
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS plots (
                 plot_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -845,7 +1925,7 @@ def init_all_tables():
             except:
                 pass
         
-        # ==================== SENSOR_DATA TABLE ====================
+        # SENSOR_DATA TABLE
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS sensor_data (
                 data_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -862,7 +1942,7 @@ def init_all_tables():
         ''')
         messages.append("Sensor_data table OK")
         
-        # ==================== SENSOR_LOGS TABLE ====================
+        # SENSOR_LOGS TABLE
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS sensor_logs (
                 log_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -877,7 +1957,7 @@ def init_all_tables():
         ''')
         messages.append("Sensor_logs table OK")
         
-        # ==================== DEVICES TABLE ====================
+        # DEVICES TABLE
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS devices (
                 device_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -902,7 +1982,7 @@ def init_all_tables():
             ''')
             messages.append("Default devices inserted")
         
-        # ==================== DEVICE_LOGS TABLE ====================
+        # DEVICE_LOGS TABLE
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS device_logs (
                 log_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -1010,7 +2090,11 @@ def register():
             'success': True,
             'access_token': access_token,
             'refresh_token': refresh_token,
-            'user_id': user_id,
+            'user': {
+                'user_id': user_id,
+                'username': username,
+                'user_type': user_type
+            },
             'message': 'User registered successfully'
         })
     except Exception as e:
@@ -1065,25 +2149,97 @@ def refresh_token():
     except jwt.InvalidTokenError:
         return jsonify({'error': 'Invalid refresh token'}), 401
 
-# ==================== RUN SERVER ====================
+# RUN SERVER
 
 if __name__ == '__main__':
-    print("=" * 50)
+    print("=" * 70)
     print("[*] Flask API Server for Smart Farm")
-    print("=" * 50)
+    print("=" * 70)
     print("Server running at: http://localhost:5000")
-    print("API endpoints:")
+    print("\n📊 API ENDPOINTS:\n")
+    
+    print("🌍 ENVIRONMENT & PLOTS:")
     print("  GET  /api/environment")
     print("  GET  /api/plots")
     print("  POST /api/plots")
     print("  PUT  /api/plots/<id>")
     print("  DEL  /api/plots/<id>")
+    
+    print("\n🔌 DEVICES & SENSORS:")
     print("  GET  /api/devices/<name>")
     print("  PUT  /api/devices/<name>")
     print("  GET  /api/sensor/latest?type=<type>")
+    print("  POST /api/sensor")
+    print("  GET  /api/sensor-logs")
+    
+    print("\n🗑️  TRASH BIN MONITORING:")
+    print("  POST /api/bin-data")
+    print("  GET  /api/bin-data?bin_id=<id>&limit=<n>")
+    print("  POST /api/bin-data/init")
+    
+    print("\n📝 DEVICE LOGS:")
+    print("  POST /api/device-logs")
+    print("  GET  /api/device-logs?device_id=<id>&limit=<n>")
+    print("  POST /api/device-logs/init")
+    
+    print("\n🌤️  WEATHER:")
+    print("  POST /api/weather")
+    print("  GET  /api/weather?location=<name>&limit=<n>")
+    print("  POST /api/weather/init")
+    
+    print("\n⚠️  ALERTS:")
+    print("  POST /api/alerts")
+    print("  GET  /api/alerts?plot_id=<id>&is_resolved=<bool>")
+    print("  PUT  /api/alerts/<id>/resolve")
+    print("  POST /api/alerts/init")
+    
+    print("\n🔧 MAINTENANCE SCHEDULE:")
+    print("  POST /api/maintenance")
+    print("  GET  /api/maintenance?device_id=<id>&status=<status>")
+    print("  POST /api/maintenance/init")
+    
+    print("\n🌱 CROP HEALTH:")
+    print("  POST /api/crop-health")
+    print("  GET  /api/crop-health?plot_id=<id>&limit=<n>")
+    print("  POST /api/crop-health/init")
+    
+    print("\n📊 STATISTICS:")
+    print("  GET  /api/statistics/overview")
+    print("  GET  /api/statistics/plot/<id>")
+    
+    print("\n📈 DEVICE HISTORY:")
+    print("  POST /api/device-history")
+    print("  GET  /api/device-history?device_id=<id>&limit=<n>")
+    print("  POST /api/device-history/init")
+    
+    print("\n🔐 AUTHENTICATION:")
     print("  POST /api/auth/check")
     print("  POST /api/auth/login")
     print("  POST /api/auth/register")
-    print("=" * 50)
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    print("  POST /api/auth/refresh")
+    print("  PUT  /api/user/profile")
+    
+    print("\n" + "=" * 70)
+    
+    logger.info(f"[PRODUCTION MODE] Starting Smart Farm API Server")
+    logger.info(f"Environment: {'DEBUG' if DEBUG_MODE else 'PRODUCTION'}")
+    logger.info(f"Database: {DB_CONFIG['host']}:{DB_CONFIG['database']}")
+    logger.info(f"Server: http://0.0.0.0:5000")
+    
+    # Use production-safe settings
+    app.run(
+        debug=DEBUG_MODE,
+        host='0.0.0.0',
+        port=5000,
+        use_reloader=DEBUG_MODE,
+        threaded=True
+    )
+
+
+# ==================== GLOBAL ERROR HANDLER ====================
+@app.errorhandler(Exception)
+def handle_error(error):
+    """Global error handler for production safety"""
+    logger.error(f"Unhandled error: {str(error)}", exc_info=True)
+    return jsonify({'error': 'Internal Server Error'}), 500
 
