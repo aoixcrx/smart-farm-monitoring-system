@@ -1,98 +1,114 @@
 # Smart Farm Flutter Application
 
-แอปพลิเคชัน Smart Farm โดย Flutter
+Smart Farm application developed using Flutter.
 
-## คุณสมบัติหลัก
+## Core Features
 
-### 1. ระบบตรวจสอบข้อมูล (Data Validation)
+### 1. Data Validation System
 
-#### หน้าลงทะเบียน (Register Screen)
-- ตรวจสอบความครบถ้วนของฟอร์ม (Empty State)
-- ตรวจสอบรหัสผ่านให้ตรงกัน (Password Matching)
-- แสดงความแข็งแรงของรหัสผ่าน (Password Strength Indicator)
-- ตรวจสอบความแข็งแรงของรหัสผ่าน (ต้องมีตัวเลขผสมตัวอักษร)
+#### Register Screen
 
-#### หน้าเข้าสู่ระบบ (Login Screen)
-- ตรวจสอบรูปแบบอีเมล (Email Format Check)
-- ตรวจสอบความถูกต้องของบัญชีจากฐานข้อมูล MySQL (Account Verification)
+* Form completeness validation (Empty state check)
+* Password confirmation matching
+* Password strength indicator
+* Password strength validation (must include both letters and numbers)
 
-#### หน้าควบคุมอุปกรณ์ (Control Screen)
-- ตรวจสอบสถานะการเชื่อมต่อ (Connection Status)
-- ตรวจสอบโหมดอัตโนมัติ (Auto Mode Conflict Check)
-- ปิดการใช้งานปุ่มเมื่ออุปกรณ์ออฟไลน์หรืออยู่ในโหมดอัตโนมัติ
+#### Login Screen
 
-#### หน้าข้อมูล CWSI (Data Screen)
-- ตรวจสอบประเภทไฟล์ (File Extension: .csv, .xlsx เท่านั้น)
-- ตรวจสอบรูปแบบไฟล์ (File Format Validation)
-- แสดงข้อความผิดพลาดเมื่อไฟล์ไม่ถูกต้อง
+* Account verification from the database
 
-### 2. การเชื่อมต่อ MySQL
+#### Control Screen
 
-ระบบใช้ MySQL สำหรับ:
-- เก็บข้อมูลผู้ใช้ (users)
-- ตรวจสอบการเข้าสู่ระบบ
-- เก็บสถานะอุปกรณ์ (device_status)
-- เก็บข้อมูลเซนเซอร์ (sensor_data)
+* Connection status verification
+* Automatic mode conflict check
+* Disable control buttons when the device is offline or in automatic mode
 
-### 3. หน้าจอและฟีเจอร์
+#### CWSI Data Screen
 
-- **Splash Screen**: หน้าจอเริ่มต้นพร้อมแอนิเมชัน
-- **Welcome Screen**: หน้าต้อนรับพร้อมการนำทาง
-- **Login Screen**: เข้าสู่ระบบพร้อมการตรวจสอบ
-- **Register Screen**: ลงทะเบียนพร้อมการตรวจสอบ
-- **Home Screen**: แสดงข้อมูลสภาพอากาศและ GPS
-- **Control Screen**: ควบคุมอุปกรณ์พร้อมการตรวจสอบสถานะ
-- **Data Screen**: แสดงกราฟข้อมูล CWSI จาก ThingSpeak หรือไฟล์
-- **Settings Screen**: หน้าตั้งค่าแอปพลิเคชัน
+* File type validation (File extensions: .csv, .xlsx only)
+* File format validation
+* Display error messages when the file is invalid
 
-## การติดตั้ง
+---
 
-### 1. ความต้องการของระบบ
+## 2. Connectivity
 
-- Flutter SDK (>=3.0.0)
-- Dart SDK (>=3.0.0)
-- MySQL Server
-- Android Studio / VS Code with Flutter extensions
+* Store user data (`users`)
+* Verify login authentication
+* Store device status (`device_status`)
+* Store sensor data (`sensor_data`)
 
-### 2. ติดตั้ง Dependencies
+---
+
+## 3. Screens and Features
+
+* **Splash Screen**: Startup screen with animation
+* **Welcome Screen**: Welcome page with navigation
+* **Login Screen**: Login with validation
+* **Register Screen**: Registration with validation
+* **Home Screen**: Displays weather information and GPS location
+* **Control Screen**: Device control with status verification
+* **Data Screen**: Displays CWSI graphs from ThingSpeak or uploaded files
+* **Settings Screen**: Application settings page
+
+---
+
+## Installation
+
+### 1. System Requirements
+
+* Flutter SDK (>= 3.0.0)
+* Dart SDK (>= 3.0.0)
+* MySQL Server
+* Android Studio / VS Code with Flutter extensions
+
+---
+
+### 2. Install Dependencies
 
 ```bash
 cd smart-farm-flutter
 flutter pub get
 ```
 
-### 3. ตั้งค่า MySQL
+---
 
-1. สร้างฐานข้อมูล:
+### 3. MySQL Configuration
+
+1. Create the database:
 
 ```sql
 CREATE DATABASE smart_farm_db;
 ```
 
-2. แก้ไขการตั้งค่าใน `lib/services/database_service.dart`:
+2. Update the configuration in `lib/services/database_service.dart`:
 
 ```dart
-static const String _host = 'localhost';  // หรือ IP ของ MySQL server
+static const String _host = 'localhost';  // Or MySQL server IP
 static const int _port = 3306;
 static const String _database = 'smart_farm_db';
 static const String _username = 'root';
 static const String _password = 'your_password';
 ```
 
-3. ตารางจะถูกสร้างอัตโนมัติเมื่อเปิดแอปครั้งแรก
+3. Tables will be created automatically when the app runs for the first time.
 
-### 4. ตั้งค่า Assets
+---
 
-คัดลอกไฟล์รูปภาพ `tree1.png` จาก `smart-farm/assets/` ไปยัง `smart-farm-flutter/assets/`
+### 4. Configure Assets
+
+Copy the image file `tree1.png` from `smart-farm/assets/` to `smart-farm-flutter/assets/`
 
 ```bash
 mkdir -p smart-farm-flutter/assets
 cp smart-farm/assets/tree1.png smart-farm-flutter/assets/
 ```
 
-### 5. ตั้งค่า Permissions
+---
 
-สำหรับ Android (`android/app/src/main/AndroidManifest.xml`):
+### 5. Set Permissions
+
+For Android (`android/app/src/main/AndroidManifest.xml`):
 
 ```xml
 <uses-permission android:name="android.permission.INTERNET"/>
@@ -100,7 +116,7 @@ cp smart-farm/assets/tree1.png smart-farm-flutter/assets/
 <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 ```
 
-สำหรับ iOS (`ios/Runner/Info.plist`):
+For iOS (`ios/Runner/Info.plist`):
 
 ```xml
 <key>NSLocationWhenInUseUsageDescription</key>
@@ -109,13 +125,17 @@ cp smart-farm/assets/tree1.png smart-farm-flutter/assets/
 <string>We need your location to show weather information</string>
 ```
 
-## การรันแอป
+---
+
+## Running the Application
 
 ```bash
 flutter run
 ```
 
-## โครงสร้างโปรเจกต์
+---
+
+## Project Structure
 
 ```
 smart-farm-flutter/
@@ -144,58 +164,74 @@ smart-farm-flutter/
 └── pubspec.yaml                  # Dependencies
 ```
 
-## การตรวจสอบข้อมูล (Validation Logic)
+---
+
+## Validation Logic
 
 ### Register Screen
-- **Empty Check**: ตรวจสอบทุกช่องต้องกรอกครบ
-- **Password Match**: รหัสผ่านและยืนยันรหัสผ่านต้องตรงกัน
-- **Password Strength**: 
-  - ตรวจสอบความยาว (>= 6 ตัวอักษร)
-  - ตรวจสอบตัวพิมพ์ใหญ่
-  - ตรวจสอบตัวเลข
-  - ตรวจสอบอักขระพิเศษ
-- **User Type**: ต้องเลือกประเภทผู้ใช้
+
+* **Empty Check**: All fields must be completed
+* **Password Match**: Password and confirm password must match
+* **Password Strength**:
+
+  * Minimum length (>= 6 characters)
+  * Must include uppercase letters
+  * Must include numbers
+  * Must include special characters
+* **User Type**: User type selection is required
 
 ### Login Screen
-- **Email Format**: ถ้า username เป็นอีเมล ต้องมีรูปแบบถูกต้อง
-- **Database Verification**: ตรวจสอบ username/password จาก MySQL
+
+* **Email Format**: If the username is an email, it must follow a valid format
+* **Database Verification**: Validate username/password against MySQL
 
 ### Control Screen
-- **Connection Status**: ตรวจสอบอุปกรณ์ออนไลน์หรือไม่
-- **Auto Mode Check**: ถ้าอยู่ในโหมดอัตโนมัติ ไม่สามารถควบคุมด้วยมือได้
-- **Button Disable**: ปุ่มควบคุมจะถูกปิดใช้งานเมื่อไม่สามารถควบคุมได้
+
+* **Connection Status**: Check whether the device is online
+* **Auto Mode Check**: Manual control is disabled when automatic mode is enabled
+* **Button Disable**: Control buttons are disabled when control is not allowed
 
 ### Data Screen
-- **File Extension**: ตรวจสอบเฉพาะไฟล์ .csv, .xlsx, .xls
-- **File Format**: ตรวจสอบรูปแบบไฟล์และโครงสร้างข้อมูล
-- **Error Handling**: แสดงข้อความผิดพลาดที่ชัดเจน
 
-## API และบริการภายนอก
+* **File Extension**: Only .csv, .xlsx, .xls files are allowed
+* **File Format**: Validate file structure and data format
+* **Error Handling**: Display clear error messages
 
-- **Weather API**: Open-Meteo (ฟรี, ไม่ต้องใช้ API Key)
-- **ThingSpeak**: Channel ID 12397 (Public Channel)
-- **Location**: ใช้ GPS ของอุปกรณ์
+---
 
-## หมายเหตุ
+## External APIs and Services
 
-1. ระบบใช้ MySQL ชั่วคราวสำหรับการตรวจสอบข้อมูลตามที่กำหนด
-2. รหัสผ่านยังไม่ได้เข้ารหัส (ควรเพิ่ม bcrypt หรือ hashing อื่นๆ ในโปรดักชัน)
-3. ไฟล์รูปภาพ `tree1.png` ต้องถูกคัดลอกไปยัง `assets/` folder
+* **Weather API**: Open-Meteo (free, no API key required)
+* **ThingSpeak**: Channel ID 12397 (Public Channel)
+* **Location Services**: Device GPS
 
-## การพัฒนาต่อ
+---
 
-- [ ] เพิ่มการเข้ารหัสรหัสผ่าน (bcrypt)
-- [ ] เพิ่ม JWT Authentication
-- [ ] เพิ่ม Unit Tests
-- [ ] เพิ่ม Integration Tests
-- [ ] เพิ่ม Error Logging
-- [ ] เพิ่ม Push Notifications
+## Notes
 
-## ผู้พัฒนา
+1. The system currently uses MySQL for validation and data storage.
+2. Passwords are not encrypted (bcrypt or other hashing methods are recommended for production).
+3. The image file `tree1.png` must be placed in the `assets/` folder.
 
-Smart Farm Application - Flutter
+---
+
+## Future Improvements
+
+* [ ] Implement password encryption (bcrypt)
+* [ ] Add JWT authentication
+* [ ] Add unit tests
+* [ ] Add integration tests
+* [ ] Add structured error logging
+* [ ] Add push notifications
+
+---
+
+## Developer
+
+Smart Farm Application – Flutter
+
+---
 
 ## License
 
 Private Project
-# smart-farm-monitoring-system
